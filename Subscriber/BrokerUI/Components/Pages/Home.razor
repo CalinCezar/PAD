@@ -1,0 +1,46 @@
+﻿@page "/"
+@inject PublisherService PublisherService
+
+<h3>Publisher</h3>
+
+<div class="mb-3">
+        <label>Mesaj:</label>
+        <input class="form-control" @bind="message" />
+</div>
+
+<div class="mb-3">
+        <label>Format:</label>
+        <select class="form-select" @bind="format">
+                <option value="json">JSON</option>
+                <option value="xml">XML</option>
+        </select>
+</div>
+
+<button class="btn btn-primary" @onclick="SendMessage">Trimite</button>
+
+<p>@status</p>
+
+@code {
+        private string message = "Salut!";
+        private string format = "json";
+        private string status = "";
+
+        private async Task SendMessage()
+        {
+                try
+                {
+                        var msg = new Message
+                        {
+                                Topic = "news",
+                                Value = message
+                        };
+
+                        await PublisherService.SendMessageAsync(msg, format);
+                        status = "Mesaj trimis cu succes!";
+                }
+                catch (Exception ex)
+                {
+                        status = $"Eroare: {ex.Message}";
+                }
+        }
+}

@@ -1,0 +1,30 @@
+﻿@page "/counter"
+
+@inject SubscriberService SubscriberService
+
+<h3>Subscriber</h3>
+
+<ul>
+        @foreach (var msg in messages)
+        {
+                <li>@msg</li>
+        }
+</ul>
+
+@code {
+        private List<string> messages = new();
+
+        protected override async Task OnInitializedAsync()
+        {
+                SubscriberService.OnMessageReceived += (msg) =>
+                {
+                        InvokeAsync(() =>
+                {
+                            messages.Add($"{msg}");
+                            StateHasChanged();
+                    });
+                };
+
+                await SubscriberService.ConnectAndSubscribeAsync("news");
+        }
+}
