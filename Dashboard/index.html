@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Message Broker Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>🚀 Message Broker Dashboard</h1>
+        <div class="status-bar">
+            <div class="status-item">
+                <span class="status-dot" id="broker-status"></span>
+                <span>Broker</span>
+            </div>
+            <div class="status-item">
+                <span class="status-dot" id="publisher-status"></span>
+                <span>Publisher</span>
+            </div>
+            <div class="status-item">
+                <span class="status-dot" id="subscriber-status"></span>
+                <span>Subscriber</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- System Overview -->
+        <section class="card">
+            <h2>📊 System Overview</h2>
+            <div class="stats-grid">
+                <div class="stat">
+                    <div class="stat-number" id="total-messages">0</div>
+                    <div class="stat-label">Total Messages</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number" id="active-subscribers">0</div>
+                    <div class="stat-label">Active Subscribers</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number" id="topics-count">0</div>
+                    <div class="stat-label">Topics</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number" id="messages-per-minute">0</div>
+                    <div class="stat-label">Msgs/Min</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Publish Message -->
+        <section class="card">
+            <h2>📤 Publish Message</h2>
+            <form id="publish-form">
+                <div class="form-group">
+                    <label for="topic">Topic:</label>
+                    <input type="text" id="topic" placeholder="Enter topic (e.g., news, alerts)" required>
+                </div>
+                <div class="form-group">
+                    <label for="content">Content:</label>
+                    <textarea id="content" placeholder="Enter message content" rows="3" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="format">Format:</label>
+                    <select id="format">
+                        <option value="JSON">JSON</option>
+                        <option value="XML">XML</option>
+                        <option value="RAW">Raw Text</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn-primary">Send Message</button>
+            </form>
+        </section>
+
+        <!-- Live Messages -->
+        <section class="card">
+            <h2>💬 Live Messages</h2>
+            <div class="messages-controls">
+                <button id="toggle-monitoring" class="btn-secondary" style="background: #e74c3c;">Stop Monitoring</button>
+                <button id="clear-messages" class="btn-secondary">Clear</button>
+                <input type="text" id="filter-topic" placeholder="Filter by topic...">
+            </div>
+            <div id="messages-feed" class="messages-feed">
+                <div class="no-messages">Synchronizing with database...</div>
+            </div>
+        </section>
+
+        <!-- System Health -->
+        <section class="card">
+            <h2>🔍 System Health</h2>
+            <div class="health-grid">
+                <div class="health-item">
+                    <h4>Broker</h4>
+                    <div class="health-details">
+                        <div>Uptime: <span id="broker-uptime">--</span></div>
+                        <div>Port: <span id="broker-port">5000</span></div>
+                        <div>Memory: <span id="broker-memory">--</span></div>
+                    </div>
+                </div>
+                <div class="health-item">
+                    <h4>Connected Clients</h4>
+                    <div id="clients-list" class="clients-list">
+                        <div class="no-clients">No clients connected</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>Message Broker System - Production Dashboard</p>
+        <div class="last-update">Last updated: <span id="last-update">--</span></div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>

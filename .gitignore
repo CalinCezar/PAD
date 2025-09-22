@@ -19,6 +19,10 @@ __pycache__/
 *.sqlite
 *.sqlite3
 
+# Logs
+logs/
+*.log
+
 # IDE files
 .vs/
 .vscode/

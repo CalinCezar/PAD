@@ -16,22 +16,35 @@ public class Message
 
 class Subscriber
 {
-	private static string host = "127.0.0.1";
-	private static int port = 5000;
+	private static string host = Environment.GetEnvironmentVariable("BROKER_HOST") ?? "127.0.0.1";
+	private static int port = int.Parse(Environment.GetEnvironmentVariable("BROKER_PORT") ?? "5000");
 
 	public static void Main()
 	{
-		Console.WriteLine("Enter topics to subscribe (comma separated, e.g., news,alerts):");
-		string input = Console.ReadLine();
 		var topics = new List<string>();
-
-		if (!string.IsNullOrWhiteSpace(input))
+		
+		// Check if running in Docker (environment variable set)
+		if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("BROKER_HOST")))
 		{
-			foreach (var t in input.Split(','))
+			// Running in Docker - auto-subscribe to default topics
+			topics.Add("news");
+			topics.Add("alerts");
+			Console.WriteLine("Docker mode: Auto-subscribing to topics: news, alerts");
+		}
+		else
+		{
+			// Interactive mode
+			Console.WriteLine("Enter topics to subscribe (comma separated, e.g., news,alerts):");
+			string? input = Console.ReadLine();
+			
+			if (!string.IsNullOrWhiteSpace(input))
 			{
-				string topic = t.Trim();
-				if (!string.IsNullOrEmpty(topic))
-					topics.Add(topic);
+				foreach (var t in input.Split(','))
+				{
+					string topic = t.Trim();
+					if (!string.IsNullOrEmpty(topic))
+						topics.Add(topic);
+				}
 			}
 		}
 
@@ -68,31 +81,77 @@ class Subscriber
 					// Give time for subscriptions to be processed
 					Thread.Sleep(100);
 
-					using (StreamReader reader = new StreamReader(stream))
+					// Start heartbeat timer (ping every 30 seconds)
+					Timer heartbeatTimer = new Timer(state =>
 					{
+						try
+						{
+							byte[] pingData = Encoding.UTF8.GetBytes("PING\n");
+							stream.Write(pingData, 0, pingData.Length);
+						}
+						catch (Exception ex)
+						{
+							Console.WriteLine($"Heartbeat failed: {ex.Message}");
+						}
+					}, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+
+					try
+					{
+						using (StreamReader reader = new StreamReader(stream))
+						{
 						while (true)
 						{
-							string message = reader.ReadLine();
+							string? message = reader.ReadLine();
 							if (message == null)
 								break;
-
-							if (message.StartsWith("FORMAT:JSON"))
-							{
-								string jsonMessage = message.Split('|')[1];
-								Message msg = JsonConvert.DeserializeObject<Message>(jsonMessage);
-								Console.WriteLine($"[JSON][{msg.Topic}] {msg.Value}");
-							}
-							else if (message.StartsWith("FORMAT:XML"))
-							{
-								string xmlMessage = message.Split('|')[1];
-								Message msg = DeserializeXml<Message>(xmlMessage);
-								Console.WriteLine($"[XML][{msg.Topic}] {msg.Value}");
-							}
-							else
-							{
-								Console.WriteLine("[RAW] " + message);
+								
+							if (message == "PONG")
+								{
+									continue;
+								}
+								else if (message.StartsWith("FORMAT:JSON"))
+								{
+									try
+									{
+										string jsonMessage = message.Split('|')[1];
+										Message msg = JsonConvert.DeserializeObject<Message>(jsonMessage);
+										Console.WriteLine($"[JSON][{msg.Topic}] {msg.Value}");
+									}
+									catch (JsonException ex)
+									{
+										Console.WriteLine($"[JSON] Parse error: {ex.Message}");
+										Console.WriteLine($"[JSON] Raw message: {message}");
+									}
+								}
+								else if (message.StartsWith("FORMAT:XML"))
+								{
+									try
+									{
+										string? xmlMessage = message.Split('|').Length > 1 ? message.Split('|')[1] : null;
+										if (xmlMessage != null)
+										{
+											Message? msg = DeserializeXml<Message>(xmlMessage);
+											if (msg != null)
+												Console.WriteLine($"[XML][{msg.Topic}] {msg.Value}");
+										}
+									}
+									catch (Exception ex)
+									{
+										Console.WriteLine($"[XML] Parse error: {ex.Message}");
+										Console.WriteLine($"[XML] Raw message: {message}");
+									}
+								}
+								else
+								{
+									Console.WriteLine("[RAW] " + message);
+								}
 							}
 						}
+					}
+					finally
+					{
+						// Clean up timer
+						heartbeatTimer?.Dispose();
 					}
 				}
 			}
@@ -105,12 +164,12 @@ class Subscriber
 	}
 
 	// Deserializare XML
-	public static T DeserializeXml<T>(string xml)
+	public static T? DeserializeXml<T>(string xml) where T : class
 	{
 		XmlSerializer serializer = new XmlSerializer(typeof(T));
 		using (StringReader reader = new StringReader(xml))
 		{
-			return (T)serializer.Deserialize(reader);
+			return (T?)serializer.Deserialize(reader);
 		}
 	}
 }
