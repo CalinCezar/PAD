@@ -16,12 +16,22 @@ __pycache__/
 
 # Database files
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
 
 # Logs
 logs/
 *.log
+
+# Process ID files
+*.pid
+
+# Cluster management files
+cluster_config.js
+broker_node_*.log
+broker_node_*.pid
 
 # IDE files
 .vs/

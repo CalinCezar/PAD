@@ -3,25 +3,140 @@ import json
 import xml.etree.ElementTree as ET
 import os
 import time
+import queue
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
+from typing import Optional, Callable, Dict, Any
+from raft_node import RaftNode, LogEntry
 
-HOST, PORT = "127.0.0.1", 5000
+# Read configuration from environment variables
+BROKER_NODE_ID = int(os.environ.get('BROKER_NODE_ID', '0'))
+BROKER_PORT = int(os.environ.get('BROKER_PORT', '5000'))
+HTTP_PORT = int(os.environ.get('HTTP_PORT', '8080'))
+
+HOST, PORT = "127.0.0.1", BROKER_PORT
 subscribers = {}  # Changed to dict: {connection: {"topics": set(), "formats": set(), "last_heartbeat": timestamp, "missed_beats": int}}
 
 # Heartbeat configuration
 HEARTBEAT_TIMEOUT = 90  # seconds
 MAX_MISSED_HEARTBEATS = 3
 
-# HTTP API configuration
-HTTP_PORT = 8080
-
 # Statistics
 broker_stats = {
     "start_time": datetime.now(),
     "total_messages": 0,
 }
+
+class DatabaseWriter:
+    """Thread-safe database writer using queue to serialize writes"""
+    
+    def __init__(self, db_path: str):
+        self.db_path = db_path
+        self.write_queue = queue.Queue()
+        self.running = True
+        
+        # Single writer thread to avoid database locks
+        self.writer_thread = threading.Thread(target=self._writer_loop, daemon=True)
+        self.writer_thread.start()
+        
+        print(f"[DatabaseWriter] Started with db: {db_path}")
+    
+    def _writer_loop(self):
+        """Single thread processes all writes sequentially"""
+        conn = None
+        try:
+            conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            conn.execute("PRAGMA journal_mode=WAL")  # Enable WAL mode for better concurrency
+            cur = conn.cursor()
+            
+            while self.running:
+                try:
+                    # Get write request from queue (blocking with timeout)
+                    write_request = self.write_queue.get(timeout=1.0)
+                    
+                    if write_request is None:  # Shutdown signal
+                        break
+                    
+                    # Execute write operation
+                    query = write_request['query']
+                    params = write_request.get('params', ())
+                    callback = write_request.get('callback')
+                    
+                    cur.execute(query, params)
+                    conn.commit()
+                    
+                    # Signal success to callback
+                    if callback:
+                        try:
+                            callback(True, cur.lastrowid)
+                        except:
+                            pass  # Callback failed, but write succeeded
+                    
+                    # Mark task as done
+                    self.write_queue.task_done()
+                    
+                except queue.Empty:
+                    continue  # Timeout, check if still running
+                except Exception as e:
+                    print(f"[DatabaseWriter] Write error: {e}")
+                    
+                    # Signal failure to callback
+                    if 'write_request' in locals() and write_request.get('callback'):
+                        try:
+                            write_request['callback'](False, None)
+                        except:
+                            pass
+                    
+                    # Mark task as done even on failure
+                    try:
+                        self.write_queue.task_done()
+                    except:
+                        pass
+        
+        except Exception as e:
+            print(f"[DatabaseWriter] Connection error: {e}")
+        finally:
+            if conn:
+                conn.close()
+    
+    def write_async(self, query: str, params: tuple = (), callback: Optional[Callable] = None):
+        """Queue a write operation (non-blocking)"""
+        write_request = {
+            'query': query,
+            'params': params,
+            'callback': callback
+        }
+        self.write_queue.put(write_request)
+    
+    def write_sync(self, query: str, params: tuple = ()) -> tuple[bool, Any]:
+        """Synchronous write with result (blocking)"""
+        result_event = threading.Event()
+        result_data = {'success': False, 'result': None}
+        
+        def callback(success: bool, result: Any):
+            result_data['success'] = success
+            result_data['result'] = result
+            result_event.set()
+        
+        self.write_async(query, params, callback)
+        result_event.wait(timeout=5.0)  # 5 second timeout
+        
+        return result_data['success'], result_data['result']
+    
+    def shutdown(self):
+        """Shutdown the writer thread"""
+        self.running = False
+        self.write_queue.put(None)  # Signal shutdown
+        
+        try:
+            self.writer_thread.join(timeout=2.0)
+        except:
+            pass
+
+# Global database writer instance
+db_writer = None
+raft_node = None
 
 def escape_xml(text):
     """Escape XML special characters"""
@@ -59,9 +174,19 @@ class BrokerHTTPHandler(BaseHTTPRequestHandler):
                 "status": "online", 
                 "port": PORT, 
                 "subscribers": healthy_subscribers,
-                "current_connections": len(subscribers)
+                "current_connections": len(subscribers),
+                "raft_status": raft_node.get_status() if raft_node else {"state": "disabled"}
             }
             self.wfile.write(json.dumps(status).encode())
+        elif parsed_path.path == '/raft':
+            # Raft-specific status endpoint
+            if raft_node:
+                raft_status = raft_node.get_status()
+                self.wfile.write(json.dumps(raft_status).encode())
+            else:
+                self.send_response(503)
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "Raft not initialized"}).encode())
         elif parsed_path.path == '/stats':
             # Count healthy subscribers (based on heartbeat)
             import time
@@ -190,12 +315,14 @@ class BrokerHTTPHandler(BaseHTTPRequestHandler):
 
 def initialize_database():
     """Initialize SQLite database with proper error handling and retry logic"""
+    global db_writer, raft_node
+    
     max_retries = 3
     retry_delay = 1  # seconds
     
     # Ensure we're in the correct directory
     broker_dir = os.path.dirname(os.path.abspath(__file__))
-    db_path = os.path.join(broker_dir, "messages.db")
+    db_path = os.path.join(broker_dir, f"messages_node_{BROKER_NODE_ID}.db")
     
     print(f"Initializing database at: {db_path}")
     
@@ -213,7 +340,7 @@ def initialize_database():
             except IOError as e:
                 raise Exception(f"Directory not writable: {broker_dir}") from e
             
-            # Connect to database
+            # Connect to database for schema creation
             conn = sqlite3.connect(db_path, check_same_thread=False)
             cursor = conn.cursor()
             
@@ -228,13 +355,70 @@ def initialize_database():
                 )
             """)
             
-            # Test write operation
+            # Test read operation
             cursor.execute("SELECT COUNT(*) FROM queue")
             count = cursor.fetchone()[0]
-            print(f"Database initialized successfully. Current message count: {count}")
+            print(f"Database schema initialized. Current message count: {count}")
             
             conn.commit()
-            return conn, cursor
+            conn.close()
+            
+            # Initialize thread-safe database writer
+            db_writer = DatabaseWriter(db_path)
+            
+            # Initialize Raft node for distributed consensus
+            # Dynamic cluster discovery - with retry and coordination
+            cluster_nodes = []
+            
+            # Scan common port range for active brokers
+            base_port = 5000
+            max_nodes = int(os.environ.get('MAX_CLUSTER_SIZE', '10'))  # Default: scan up to 10 nodes
+            
+            print(f"[Node {BROKER_NODE_ID}] Discovering cluster nodes...")
+            
+            # Multiple discovery attempts to handle timing issues
+            for attempt in range(3):
+                cluster_nodes = []
+                for node_id in range(max_nodes):
+                    port = base_port + node_id
+                    try:
+                        # Try to connect to potential node
+                        test_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        test_sock.settimeout(0.2)  # Slightly longer timeout
+                        result = test_sock.connect_ex(('127.0.0.1', port))
+                        test_sock.close()
+                        
+                        if result == 0:  # Connection successful
+                            cluster_nodes.append(("127.0.0.1", port))
+                            print(f"  ✅ Found node at 127.0.0.1:{port}")
+                    except:
+                        pass
+                
+                # If we found nodes or this is the last attempt, break
+                if cluster_nodes or attempt == 2:
+                    break
+                    
+                print(f"  🔄 Discovery attempt {attempt + 1}/3, found {len(cluster_nodes)} nodes, retrying...")
+                time.sleep(1)  # Wait before retry
+            
+            # Always ensure this node is in the cluster list
+            this_node = ("127.0.0.1", PORT)
+            if this_node not in cluster_nodes:
+                cluster_nodes.append(this_node)
+                print(f"  ✅ Added self: 127.0.0.1:{PORT}")
+            
+            # Sort cluster nodes for consistency
+            cluster_nodes.sort()
+            
+            print(f"[Node {BROKER_NODE_ID}] Final cluster configuration: {len(cluster_nodes)} nodes")
+            for i, (host, port) in enumerate(cluster_nodes):
+                print(f"  Node {i}: {host}:{port}")
+            
+            node_id = f"127.0.0.1:{PORT}"
+            raft_node = RaftNode(node_id, cluster_nodes, db_writer)
+            
+            print(f"✅ Database writer and Raft node initialized (Node {BROKER_NODE_ID})")
+            return True
             
         except Exception as e:
             print(f"Database initialization attempt {attempt + 1} failed: {e}")
@@ -246,8 +430,12 @@ def initialize_database():
                 print("Failed to initialize database after all retries")
                 raise
 
-# Initialize database connection
-conn_db, cur = initialize_database()
+# Initialize database and systems
+initialize_database()
+
+# Create a read-only connection for queries
+conn_db = sqlite3.connect(os.path.join(os.path.dirname(os.path.abspath(__file__)), f"messages_node_{BROKER_NODE_ID}.db"), check_same_thread=False)
+cur = conn_db.cursor()
 
 def parse_message_content(format_type, body):
     """Parse message content and extract topic information"""
@@ -269,11 +457,43 @@ def parse_message_content(format_type, body):
     return topic
 
 def save_message(topic, fmt, body):
+    """Save message using Raft consensus for distributed consistency"""
     timestamp = datetime.now().isoformat()
-    cur.execute("INSERT INTO queue(topic, format, body, timestamp) VALUES (?,?,?,?)", 
-                (topic, fmt, body, timestamp))
-    conn_db.commit()
-    broker_stats["total_messages"] += 1  # Update stats counter
+    
+    # Create Raft log entry for the message
+    command = {
+        'type': 'message',
+        'topic': topic,
+        'format': fmt,
+        'body': body,
+        'timestamp': timestamp
+    }
+    
+    # Try to append to Raft log (only works if this node is leader)
+    if raft_node:
+        success, message = raft_node.append_entry(command)
+        if success:
+            broker_stats["total_messages"] += 1
+            print(f"✅ Message saved via Raft consensus: {topic}")
+            return True
+        else:
+            print(f"⚠️  Raft append failed: {message}")
+            # Fall back to direct database write if not leader
+    
+    # Fallback: Direct database write (for single-node or fallback scenarios)
+    def on_write_complete(success, result):
+        if success:
+            broker_stats["total_messages"] += 1
+            print(f"✅ Message saved (fallback): {topic}")
+        else:
+            print(f"❌ Failed to save message: {topic}")
+    
+    db_writer.write_async(
+        "INSERT INTO queue(topic, format, body, timestamp) VALUES (?,?,?,?)", 
+        (topic, fmt, body, timestamp),
+        on_write_complete
+    )
+    return True
 
 def validate_message_format(format_type, body):
     """Validate message format and return True if valid"""
@@ -449,13 +669,57 @@ def broker():
                         except:
                             pass
                     
-                    time.sleep(30)  # Check every 30 seconds
+                    time.sleep(5)  # Check every 30 seconds
                 except Exception as e:
                     print(f"Error in cleanup thread: {e}")
-                    time.sleep(30)
+                    time.sleep(5)
         
-        # Start cleanup thread
+        def cleanup_dead_nodes():
+            """Background thread to clean up dead node files"""
+            while True:
+                try:
+                    # Only run cleanup on the current leader to avoid conflicts
+                    if raft_node and raft_node.state.value == "LEADER":
+                        # Look for stale PID files in parent directory
+                        import glob
+                        parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                        pid_pattern = os.path.join(parent_dir, "broker_node_*.pid")
+                        
+                        for pid_file in glob.glob(pid_pattern):
+                            try:
+                                with open(pid_file, 'r') as f:
+                                    pid = int(f.read().strip())
+                                
+                                # Check if process exists
+                                try:
+                                    os.kill(pid, 0)  # Signal 0 checks if process exists
+                                except OSError:
+                                    # Process doesn't exist, clean up
+                                    print(f"[Leader Cleanup] Dead process detected, removing {pid_file}")
+                                    os.remove(pid_file)
+                                    
+                                    # Also remove corresponding log file
+                                    log_file = pid_file.replace('.pid', '.log')
+                                    if os.path.exists(log_file):
+                                        os.remove(log_file)
+                                        print(f"[Leader Cleanup] Removed {log_file}")
+                                        
+                            except (ValueError, FileNotFoundError):
+                                # Invalid PID file, remove it
+                                try:
+                                    os.remove(pid_file)
+                                    print(f"[Leader Cleanup] Removed invalid PID file: {pid_file}")
+                                except:
+                                    pass
+                    
+                    time.sleep(60)  # Check every minute
+                except Exception as e:
+                    print(f"Error in dead node cleanup: {e}")
+                    time.sleep(60)
+        
+        # Start cleanup threads
         threading.Thread(target=cleanup_dead_subscribers, daemon=True).start()
+        threading.Thread(target=cleanup_dead_nodes, daemon=True).start()
         
         while True:
             try:
@@ -477,8 +741,72 @@ def broker():
             except Exception as e:
                 print(f"Error accepting connection: {e}")
 
+def start_raft_rpc_server():
+    """Start Raft RPC server for inter-node communication"""
+    raft_port = PORT + 1000  # Use port+1000 for Raft RPC
+    
+    def handle_raft_rpc(conn, addr):
+        try:
+            data = conn.recv(1024).decode().strip()
+            if not data:
+                return
+            
+            rpc_request = json.loads(data)
+            method = rpc_request.get('method')
+            request_data = rpc_request.get('request')
+            
+            if method == 'vote_request':
+                from raft_node import VoteRequest
+                vote_request = VoteRequest(**request_data)
+                response = raft_node.handle_vote_request(vote_request)
+                response_data = response.__dict__
+            
+            elif method == 'append_entries':
+                from raft_node import AppendEntriesRequest
+                append_request = AppendEntriesRequest(**request_data)
+                response = raft_node.handle_append_entries(append_request)
+                response_data = response.__dict__
+            
+            else:
+                response_data = {"error": f"Unknown method: {method}"}
+            
+            conn.send(json.dumps(response_data).encode() + b'\n')
+            
+        except Exception as e:
+            print(f"Raft RPC error: {e}")
+            error_response = {"error": str(e)}
+            try:
+                conn.send(json.dumps(error_response).encode() + b'\n')
+            except:
+                pass
+        finally:
+            conn.close()
+    
+    def raft_rpc_server():
+        raft_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        raft_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        raft_sock.bind(('127.0.0.1', raft_port))
+        raft_sock.listen(5)
+        print(f"Raft RPC server listening on port {raft_port}")
+        
+        while True:
+            try:
+                conn, addr = raft_sock.accept()
+                threading.Thread(target=handle_raft_rpc, args=(conn, addr), daemon=True).start()
+            except Exception as e:
+                print(f"Raft RPC server error: {e}")
+                break
+    
+    # Start Raft RPC server in separate thread
+    raft_thread = threading.Thread(target=raft_rpc_server, daemon=True)
+    raft_thread.start()
+    return raft_thread
+
 if __name__ == "__main__":
     try:
+        # Start Raft RPC server
+        raft_rpc_thread = start_raft_rpc_server()
+        
         # Start HTTP server in a separate thread
         http_server = HTTPServer(('127.0.0.1', HTTP_PORT), BrokerHTTPHandler)
         http_thread = threading.Thread(target=http_server.serve_forever, daemon=True)
@@ -489,4 +817,11 @@ if __name__ == "__main__":
         broker()
     except KeyboardInterrupt:
         print("\nBroker shutting down...")
+        
+        # Cleanup
+        if db_writer:
+            db_writer.shutdown()
+        if raft_node:
+            raft_node.shutdown()
+        
         conn_db.close()

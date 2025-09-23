@@ -1,7 +1,17 @@
 #!/bin/bash
 
-# Stop Message Broker System
+# Stop Message Broker System - Auto-detect mode
 echo "🛑 Stopping Message Broker System..."
+
+# Check if cluster mode is running (look for cluster PID files)
+if [ -f "broker_node_0.pid" ] || [ -f "broker_node_1.pid" ] || [ -f "broker_node_2.pid" ]; then
+    echo "🌐 Detected cluster mode - delegating to cluster stop script..."
+    ./stop_cluster.sh
+    exit 0
+fi
+
+# Single-node mode cleanup
+echo "📡 Stopping single-node mode..."
 
 # Read PIDs if they exist
 if [ -f logs/broker.pid ]; then
@@ -22,4 +32,4 @@ fi
 pkill -f "broker.py"
 pkill -f "http.server 3000"
 
-echo "✅ System stopped."
+echo "✅ Single-node system stopped."

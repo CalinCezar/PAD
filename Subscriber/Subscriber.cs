@@ -2,6 +2,7 @@ using Newtonsoft.Json;
 using System.Net.Sockets;
 using System.Text;
 using System.Xml.Serialization;
+using System.Net.Http;
 
 namespace Subscriber;
 
@@ -14,13 +15,57 @@ public class Message
 	public string Topic { get; set; } = string.Empty;
 }
 
+public class ClusterNode
+{
+	public string Host { get; set; } = string.Empty;
+	public int TcpPort { get; set; }
+	public int HttpPort { get; set; }
+	public string Name { get; set; } = string.Empty;
+	public bool IsLeader { get; set; }
+	public bool IsAvailable { get; set; } = true;
+	
+	public ClusterNode(string host, int tcpPort, int httpPort, string name)
+	{
+		Host = host;
+		TcpPort = tcpPort;
+		HttpPort = httpPort;
+		Name = name;
+	}
+	
+	public string HttpUrl => $"http://{Host}:{HttpPort}";
+	public string ConnectionString => $"{Host}:{TcpPort}";
+	
+	public override string ToString()
+	{
+		var status = IsLeader ? " [LEADER]" : "";
+		status += IsAvailable ? " [ONLINE]" : " [OFFLINE]";
+		return $"{Name} ({ConnectionString}){status}";
+	}
+}
+
 class Subscriber
 {
 	private static string host = Environment.GetEnvironmentVariable("BROKER_HOST") ?? "127.0.0.1";
 	private static int port = int.Parse(Environment.GetEnvironmentVariable("BROKER_PORT") ?? "5000");
+	private static bool useCluster = false;
+	private static List<ClusterNode> clusterNodes = new List<ClusterNode>();
+	private static ClusterNode? currentNode = null;
 
-	public static void Main()
+	public static void Main(string[] args)
 	{
+		// Check for cluster mode argument
+		useCluster = args.Length > 0 && args[0].Equals("cluster", StringComparison.OrdinalIgnoreCase);
+		
+		if (useCluster)
+		{
+			InitializeCluster();
+			Console.WriteLine("🌐 Cluster mode enabled with " + clusterNodes.Count + " nodes");
+		}
+		else
+		{
+			Console.WriteLine("📡 Single node mode");
+		}
+		
 		var topics = new List<string>();
 		
 		// Check if running in Docker (environment variable set)
@@ -50,6 +95,95 @@ class Subscriber
 
 		StartSubscriber(topics);
 	}
+	
+	private static void InitializeCluster()
+	{
+		// Add cluster nodes (matches the cluster configuration)
+		clusterNodes.Add(new ClusterNode("127.0.0.1", 5000, 8080, "Node 0"));
+		clusterNodes.Add(new ClusterNode("127.0.0.1", 5001, 8081, "Node 1"));
+		clusterNodes.Add(new ClusterNode("127.0.0.1", 5002, 8082, "Node 2"));
+		
+		UpdateClusterStatus();
+	}
+	
+	private static void UpdateClusterStatus()
+	{
+		Console.WriteLine("🔍 Checking cluster status...");
+		
+		using (var httpClient = new HttpClient())
+		{
+			httpClient.Timeout = TimeSpan.FromSeconds(2);
+			
+			foreach (var node in clusterNodes)
+			{
+				try
+				{
+					var response = httpClient.GetAsync(node.HttpUrl + "/raft").Result;
+					if (response.IsSuccessStatusCode)
+					{
+						var content = response.Content.ReadAsStringAsync().Result;
+						
+						// Simple JSON parsing for state
+						bool isLeader = content.Contains("\"state\":\"LEADER\"") || 
+									   content.Contains("\"state\": \"LEADER\"");
+						
+						node.IsAvailable = true;
+						node.IsLeader = isLeader;
+						
+						if (isLeader)
+						{
+							Console.WriteLine($"👑 Found leader: {node}");
+						}
+						else
+						{
+							Console.WriteLine($"📡 Available node: {node}");
+						}
+					}
+					else
+					{
+						node.IsAvailable = false;
+						node.IsLeader = false;
+						Console.WriteLine($"❌ Unavailable node: {node}");
+					}
+				}
+				catch (Exception e)
+				{
+					node.IsAvailable = false;
+					node.IsLeader = false;
+					Console.WriteLine($"❌ Unreachable node: {node} ({e.Message})");
+				}
+			}
+		}
+	}
+	
+	private static ClusterNode? FindBestNode()
+	{
+		// Update cluster status first
+		UpdateClusterStatus();
+		
+		// Prefer leader nodes
+		foreach (var node in clusterNodes)
+		{
+			if (node.IsAvailable && node.IsLeader)
+			{
+				Console.WriteLine($"🎯 Selecting leader node: {node}");
+				return node;
+			}
+		}
+		
+		// Fallback to any available node
+		foreach (var node in clusterNodes)
+		{
+			if (node.IsAvailable)
+			{
+				Console.WriteLine($"🔄 Selecting available node: {node}");
+				return node;
+			}
+		}
+		
+		Console.WriteLine("⚠️  No available nodes found, trying first node as fallback");
+		return clusterNodes.Count > 0 ? clusterNodes[0] : null;
+	}
 
 	public static void StartSubscriber(List<string> topics)
 	{
@@ -57,8 +191,33 @@ class Subscriber
 		{
 			try
 			{
+				string connectHost;
+				int connectPort;
+				
+				if (useCluster)
+				{
+					var targetNode = FindBestNode();
+					if (targetNode == null)
+					{
+						Console.WriteLine("❌ No cluster nodes available, waiting 5 seconds...");
+						Thread.Sleep(5000);
+						continue;
+					}
+					
+					connectHost = targetNode.Host;
+					connectPort = targetNode.TcpPort;
+					currentNode = targetNode;
+					Console.WriteLine($"🌐 Connecting to cluster via {targetNode}");
+				}
+				else
+				{
+					connectHost = host;
+					connectPort = port;
+					Console.WriteLine($"📡 Connecting to single node {connectHost}:{connectPort}");
+				}
+				
 				Console.WriteLine("Attempting to connect to broker...");
-				using (TcpClient client = new TcpClient(host, port))
+				using (TcpClient client = new TcpClient(connectHost, connectPort))
 				{
 					NetworkStream stream = client.GetStream();
 
@@ -157,7 +316,17 @@ class Subscriber
 			}
 			catch (Exception ex)
 			{
-				Console.WriteLine($"Connection lost: {ex.Message}. Trying to reconnect...");
+				Console.WriteLine($"❌ Connection error: {ex.Message}");
+				
+				if (useCluster)
+				{
+					Console.WriteLine("🔄 Trying to reconnect to cluster in 5 seconds...");
+				}
+				else
+				{
+					Console.WriteLine("🔄 Trying to reconnect in 5 seconds...");
+				}
+				
 				Thread.Sleep(5000);
 			}
 		}
