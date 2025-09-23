@@ -212,6 +212,11 @@ class BrokerHTTPHandler(BaseHTTPRequestHandler):
             cur.execute("SELECT topic, format, body, timestamp FROM queue ORDER BY timestamp DESC LIMIT 20")
             messages = [{"topic": r[0], "format": r[1], "content": r[2], "timestamp": r[3]} for r in cur.fetchall()]
             self.wfile.write(json.dumps({"messages": messages}).encode())
+        elif parsed_path.path == '/topics':
+            # Return list of unique topics from database
+            cur.execute("SELECT DISTINCT topic FROM queue ORDER BY topic")
+            topics = [row[0] for row in cur.fetchall()]
+            self.wfile.write(json.dumps({"topics": topics}).encode())
         elif parsed_path.path == '/subscribers':
             # Return list of active subscribers with their topics
             import time
