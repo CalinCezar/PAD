@@ -6,27 +6,49 @@
 echo "🔍 Raft Cluster Status"
 echo "======================"
 
-# Auto-detect cluster size by checking for PID files
+# Auto-detect cluster size by checking for valid PID files only
 CLUSTER_SIZE=0
+MAX_NODE_ID=-1
 for i in {0..9}; do  # Check up to 10 nodes
-    if [ -f "broker_node_${i}.pid" ] || lsof -i :$((8080 + i)) > /dev/null 2>&1; then
-        CLUSTER_SIZE=$((i + 1))
+    if [ -f "broker_node_${i}.pid" ]; then
+        pid=$(cat "broker_node_${i}.pid")
+        # Only count nodes with valid running processes
+        if ps -p "$pid" > /dev/null 2>&1; then
+            MAX_NODE_ID=$i
+        else
+            # Clean up dead PID files immediately
+            echo "🧹 Cleaning up dead PID file: broker_node_${i}.pid"
+            rm -f "broker_node_${i}.pid"
+            rm -f "broker_node_${i}.log"
+        fi
     fi
 done
 
-if [ $CLUSTER_SIZE -eq 0 ]; then
-    echo "❌ No cluster nodes detected"
-    echo "Start cluster with: ./start.sh cluster"
+if [ $MAX_NODE_ID -eq -1 ]; then
+    echo "❌ No running cluster nodes detected"
+    echo "Start cluster with: ./start_cluster_simple.sh"
     exit 1
 fi
 
-echo "Detected ${CLUSTER_SIZE} node(s)"
+# Create list of actual running nodes
+RUNNING_NODES=()
+for i in $(seq 0 $MAX_NODE_ID); do
+    if [ -f "broker_node_${i}.pid" ]; then
+        pid=$(cat "broker_node_${i}.pid")
+        if ps -p "$pid" > /dev/null 2>&1; then
+            RUNNING_NODES+=($i)
+        fi
+    fi
+done
+
+CLUSTER_SIZE=${#RUNNING_NODES[@]}
+echo "Detected ${CLUSTER_SIZE} running node(s): ${RUNNING_NODES[*]}"
 echo ""
 
 HTTP_BASE_PORT=8080
 
-for i in $(seq 0 $((CLUSTER_SIZE - 1))); do
-    http_port=$((HTTP_BASE_PORT + i))  # Removed 'local' - not needed in this context
+for i in "${RUNNING_NODES[@]}"; do
+    http_port=$((HTTP_BASE_PORT + i))
     echo "Node ${i} (http://127.0.0.1:${http_port}):"
     echo "----------------------------------------"
     
@@ -92,8 +114,8 @@ leader_count=0
 follower_count=0
 candidate_count=0
 
-for i in $(seq 0 $((CLUSTER_SIZE - 1))); do
-    http_port=$((HTTP_BASE_PORT + i))  # Removed 'local' - not in function
+for i in "${RUNNING_NODES[@]}"; do
+    http_port=$((HTTP_BASE_PORT + i))
     if curl -s --connect-timeout 2 http://127.0.0.1:${http_port}/raft > /dev/null 2>&1; then
         online_nodes=$((online_nodes + 1))
         

@@ -239,6 +239,74 @@ public class Publisher {
             }
         }
     }
+
+private List<String> getTopicsFromDatabase() {
+    List<String> topics = new ArrayList<>();
+    String brokerHttpUrl = "http://127.0.0.1:8080";
+
+    if (clusterMode && currentNode != null) {
+        brokerHttpUrl = currentNode.getHttpUrl();
+    }
+
+    try {
+        URL url = new URL(brokerHttpUrl + "/topics");
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("GET");
+        conn.setConnectTimeout(5000);
+        conn.setReadTimeout(5000);
+
+        if (conn.getResponseCode() == 200) {
+            BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+            StringBuilder response = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                response.append(line);
+            }
+            reader.close();
+
+            // Parse the JSON response: {"topics": ["topic1", "topic2", ...]}
+            String jsonResponse = response.toString();
+            System.out.println("🔍 Raw response: " + jsonResponse);
+            
+            if (jsonResponse.contains("\"topics\"")) {
+                // Simple JSON parsing to extract topics array
+                String topicsArrayStr = jsonResponse.substring(
+                    jsonResponse.indexOf("[") + 1, 
+                    jsonResponse.lastIndexOf("]")
+                );
+                
+                // Split by comma and clean up each topic
+                if (!topicsArrayStr.trim().isEmpty()) {
+                    String[] topicArray = topicsArrayStr.split(",");
+                    for (String topic : topicArray) {
+                        // Remove quotes and whitespace
+                        String cleanTopic = topic.trim().replaceAll("\"", "");
+                        if (!cleanTopic.isEmpty()) {
+                            topics.add(cleanTopic);
+                        }
+                    }
+                }
+            }
+
+            System.out.println("📚 Loaded topics from broker API: " + topics);
+        }
+        conn.disconnect();
+    } catch (Exception e) {
+        System.err.println("❌ Error accessing broker API: " + e.getMessage());
+        return getDefaultTopics();
+    }
+
+    return topics.isEmpty() ? getDefaultTopics() : topics;
+}
+    
+    private List<String> getDefaultTopics() {
+        List<String> defaultTopics = new ArrayList<>();
+        defaultTopics.add("news");
+        defaultTopics.add("alerts");
+        defaultTopics.add("weather");
+        defaultTopics.add("sports");
+        return defaultTopics;
+    }
     
     private ClusterNode findBestNode() {
         // Update cluster status first
@@ -589,9 +657,13 @@ public class Publisher {
                 } else if (command[0].equalsIgnoreCase("auto")) {
                     System.out.println("Starting auto-publishing mode (press Enter to stop)...");
                     
-                    String[] topics = {"news", "alerts", "weather", "sports"};
+                    // Get topics from database instead of hardcoded array
+                    List<String> topicsList = publisher.getTopicsFromDatabase();
+                    String[] topics = topicsList.toArray(new String[0]);
                     String[] formats = {"JSON", "XML"};
                     Random random = new Random();
+                    
+                    System.out.println("📚 Using topics from database: " + topicsList);
                     
                     // Start auto-publishing in a separate thread
                     Thread autoThread = new Thread(() -> {
@@ -692,9 +764,15 @@ public class Publisher {
         
         System.out.println("Starting auto-publishing mode for Docker...");
         
-        String[] topics = {"news", "alerts", "updates"};
+        // Get topics from database instead of hardcoded array
+        System.out.println("🔍 Fetching topics from broker API...");
+        List<String> topicsList = publisher.getTopicsFromDatabase();
+        String[] topics = topicsList.toArray(new String[0]);
         String[] eventTypes = {"UserLogin", "DataUpdate", "SystemAlert", "NewsPublished"};
         Random random = new Random();
+        
+        System.out.println("📚 Using topics from broker API: " + topicsList);
+        System.out.println("🎯 Will use " + topics.length + " topics for auto-publishing");
         
         while (true) {
             try {
