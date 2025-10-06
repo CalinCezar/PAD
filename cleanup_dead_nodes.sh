@@ -6,11 +6,15 @@
 echo "🧹 Dead Node Cleanup"
 echo "===================="
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$SCRIPT_DIR"
+
 cleaned_count=0
 total_checked=0
 
 # Check for PID files and validate processes
-for pid_file in broker_node_*.pid; do
+for pid_file in "${PROJECT_ROOT}"/broker_node_*.pid; do
     # Skip if no PID files exist
     if [ ! -f "$pid_file" ]; then
         continue
@@ -35,14 +39,14 @@ for pid_file in broker_node_*.pid; do
         echo "    🗑️  Removed $pid_file"
         
         # Remove log file
-        log_file="broker_node_${node_id}.log"
+        log_file="${PROJECT_ROOT}/broker_node_${node_id}.log"
         if [ -f "$log_file" ]; then
             rm -f "$log_file"
             echo "    🗑️  Removed $log_file"
         fi
         
         # Remove database file (optional - comment out to preserve data)
-        db_file="Broker/messages_node_${node_id}.db"
+        db_file="${PROJECT_ROOT}/Broker/messages_node_${node_id}.db"
         if [ -f "$db_file" ]; then
             echo "    ⚠️  Database file exists: $db_file"
             echo "    💾 Keeping database (contains message history)"

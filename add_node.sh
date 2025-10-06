@@ -4,6 +4,10 @@
 echo "➕ Adding New Node to Raft Cluster"
 echo "=================================="
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$SCRIPT_DIR"
+
 # Auto-discover next available node ID
 NEXT_NODE_ID=0
 while lsof -i :$((5000 + NEXT_NODE_ID)) > /dev/null 2>&1; do
@@ -44,12 +48,12 @@ echo "✅ Existing cluster detected"
 
 # Start the new node
 echo "🚀 Starting Node ${NEXT_NODE_ID}..."
-cd /home/calin/Projects/UTM/PAD/Broker
+cd "${PROJECT_ROOT}/Broker"
 
-MAX_CLUSTER_SIZE=20 BROKER_NODE_ID=$NEXT_NODE_ID BROKER_PORT=$TCP_PORT HTTP_PORT=$HTTP_PORT python3 broker.py > /home/calin/Projects/UTM/PAD/broker_node_${NEXT_NODE_ID}.log 2>&1 &
+MAX_CLUSTER_SIZE=20 BROKER_NODE_ID=$NEXT_NODE_ID BROKER_PORT=$TCP_PORT HTTP_PORT=$HTTP_PORT python3 broker.py > "${PROJECT_ROOT}/broker_node_${NEXT_NODE_ID}.log" 2>&1 &
 
 NEW_PID=$!
-echo $NEW_PID > /home/calin/Projects/UTM/PAD/broker_node_${NEXT_NODE_ID}.pid
+echo $NEW_PID > "${PROJECT_ROOT}/broker_node_${NEXT_NODE_ID}.pid"
 
 echo "✅ Node ${NEXT_NODE_ID} started with PID: ${NEW_PID}"
 echo ""

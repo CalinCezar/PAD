@@ -13,8 +13,48 @@ CLUSTER_MODE=${1:-"single"}
 if [ "$CLUSTER_MODE" = "cluster" ]; then
     echo "🌐 Starting 3-Node Raft Cluster..."
     
-    # Start the cluster using our simple cluster script (no file generation)
-    ./start_cluster_simple.sh
+    # Get the directory where this script is located
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    PROJECT_ROOT="$SCRIPT_DIR"
+    
+    # Kill any existing processes
+    pkill -f "python.*broker" 2>/dev/null || true
+    sleep 2
+
+    # Remove old files
+    rm -f "${PROJECT_ROOT}"/broker_node_*.py "${PROJECT_ROOT}"/broker_node_*.log "${PROJECT_ROOT}"/broker_node_*.pid "${PROJECT_ROOT}"/messages_node_*.db
+
+    # Start Node 0 (Port 5000)
+    echo "Starting Node 0 (TCP:5000, HTTP:8080)..."
+    cd "${PROJECT_ROOT}/Broker"
+    BROKER_NODE_ID=0 BROKER_PORT=5000 HTTP_PORT=8080 python3 broker.py > "${PROJECT_ROOT}/broker_node_0.log" 2>&1 &
+    echo $! > "${PROJECT_ROOT}/broker_node_0.pid"
+    sleep 3
+
+    # Start Node 1 (Port 5001) 
+    echo "Starting Node 1 (TCP:5001, HTTP:8081)..."
+    cd "${PROJECT_ROOT}/Broker"
+    BROKER_NODE_ID=1 BROKER_PORT=5001 HTTP_PORT=8081 python3 broker.py > "${PROJECT_ROOT}/broker_node_1.log" 2>&1 &
+    echo $! > "${PROJECT_ROOT}/broker_node_1.pid"
+    sleep 3
+
+    # Start Node 2 (Port 5002)
+    echo "Starting Node 2 (TCP:5002, HTTP:8082)..."
+    cd "${PROJECT_ROOT}/Broker"
+    BROKER_NODE_ID=2 BROKER_PORT=5002 HTTP_PORT=8082 python3 broker.py > "${PROJECT_ROOT}/broker_node_2.log" 2>&1 &
+    echo $! > "${PROJECT_ROOT}/broker_node_2.pid"
+    sleep 3
+
+    echo "✅ Cluster nodes started!"
+    echo ""
+    echo "Node Status:"
+    echo "============"
+    echo "Node 0 - TCP:5000, HTTP:8080 (PID: $(cat ${PROJECT_ROOT}/broker_node_0.pid))"
+    echo "Node 1 - TCP:5001, HTTP:8081 (PID: $(cat ${PROJECT_ROOT}/broker_node_1.pid))"  
+    echo "Node 2 - TCP:5002, HTTP:8082 (PID: $(cat ${PROJECT_ROOT}/broker_node_2.pid))"
+    
+    # Return to project root for dashboard setup
+    cd "${PROJECT_ROOT}"
     
     # Wait for cluster to stabilize
     echo "⏳ Waiting for cluster to stabilize..."
@@ -26,7 +66,7 @@ if [ "$CLUSTER_MODE" = "cluster" ]; then
     echo "📊 Node 2 - TCP:5002, HTTP:8082, Raft-RPC:6002"
     echo ""
     echo "🔍 Check cluster status: ./cluster_status.sh"
-    echo "🛑 Stop cluster: ./stop_cluster.sh"
+    echo "🛑 Stop cluster: ./stop.sh"
     
     # Start Dashboard pointing to cluster
     echo "🌐 Starting Dashboard (HTTP:3000) with cluster support..."

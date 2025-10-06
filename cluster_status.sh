@@ -6,35 +6,39 @@
 echo "🔍 Raft Cluster Status"
 echo "======================"
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$SCRIPT_DIR"
+
 # Auto-detect cluster size by checking for valid PID files only
 CLUSTER_SIZE=0
 MAX_NODE_ID=-1
 for i in {0..9}; do  # Check up to 10 nodes
-    if [ -f "broker_node_${i}.pid" ]; then
-        pid=$(cat "broker_node_${i}.pid")
+    if [ -f "${PROJECT_ROOT}/broker_node_${i}.pid" ]; then
+        pid=$(cat "${PROJECT_ROOT}/broker_node_${i}.pid")
         # Only count nodes with valid running processes
         if ps -p "$pid" > /dev/null 2>&1; then
             MAX_NODE_ID=$i
         else
             # Clean up dead PID files immediately
             echo "🧹 Cleaning up dead PID file: broker_node_${i}.pid"
-            rm -f "broker_node_${i}.pid"
-            rm -f "broker_node_${i}.log"
+            rm -f "${PROJECT_ROOT}/broker_node_${i}.pid"
+            rm -f "${PROJECT_ROOT}/broker_node_${i}.log"
         fi
     fi
 done
 
 if [ $MAX_NODE_ID -eq -1 ]; then
     echo "❌ No running cluster nodes detected"
-    echo "Start cluster with: ./start_cluster_simple.sh"
+    echo "Start cluster with: ./start.sh cluster"
     exit 1
 fi
 
 # Create list of actual running nodes
 RUNNING_NODES=()
 for i in $(seq 0 $MAX_NODE_ID); do
-    if [ -f "broker_node_${i}.pid" ]; then
-        pid=$(cat "broker_node_${i}.pid")
+    if [ -f "${PROJECT_ROOT}/broker_node_${i}.pid" ]; then
+        pid=$(cat "${PROJECT_ROOT}/broker_node_${i}.pid")
         if ps -p "$pid" > /dev/null 2>&1; then
             RUNNING_NODES+=($i)
         fi
@@ -53,7 +57,7 @@ for i in "${RUNNING_NODES[@]}"; do
     echo "----------------------------------------"
     
     # Check if PID file exists
-    pid_file="broker_node_${i}.pid"
+    pid_file="${PROJECT_ROOT}/broker_node_${i}.pid"
     if [ -f "$pid_file" ]; then
         pid=$(cat "$pid_file")
         
@@ -61,7 +65,7 @@ for i in "${RUNNING_NODES[@]}"; do
         if ! ps -p "$pid" > /dev/null 2>&1; then
             echo "💀 Process dead (PID $pid) - cleaning up files..."
             rm -f "$pid_file"
-            rm -f "broker_node_${i}.log"
+            rm -f "${PROJECT_ROOT}/broker_node_${i}.log"
             echo "🧹 Cleaned up dead node files"
             echo ""
             continue
@@ -91,8 +95,8 @@ for i in "${RUNNING_NODES[@]}"; do
         echo "❌ Status: OFFLINE"
         
         # Check if process file exists
-        if [ -f "broker_node_${i}.pid" ]; then
-            pid=$(cat broker_node_${i}.pid)
+        if [ -f "${PROJECT_ROOT}/broker_node_${i}.pid" ]; then
+            pid=$(cat ${PROJECT_ROOT}/broker_node_${i}.pid)
             if ps -p $pid > /dev/null 2>&1; then
                 echo "🔄 Process running but not responding (PID: $pid)"
             else
