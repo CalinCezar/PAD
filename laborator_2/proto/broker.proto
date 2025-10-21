@@ -1,0 +1,281 @@
+syntax = "proto3";
+
+package broker;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+// Message formats supported by the broker
+enum MessageFormat {
+  RAW = 0;
+  JSON = 1;
+  XML = 2;
+}
+
+// Node states for RAFT consensus
+enum NodeState {
+  FOLLOWER = 0;
+  CANDIDATE = 1;
+  LEADER = 2;
+}
+
+// Message structure for publishing and receiving
+message Message {
+  int64 id = 1;
+  string topic = 2;
+  MessageFormat format = 3;
+  string content = 4;
+  google.protobuf.Timestamp timestamp = 5;
+  string event_name = 6;
+}
+
+// Publisher service - handles message publishing
+service PublisherService {
+  // Publish a single message
+  rpc PublishMessage(PublishRequest) returns (PublishResponse);
+  
+  // Publish multiple messages in a batch
+  rpc PublishBatch(stream PublishRequest) returns (PublishResponse);
+  
+  // Check publisher health
+  rpc GetPublisherHealth(google.protobuf.Empty) returns (HealthResponse);
+}
+
+// Subscriber service - handles message subscriptions
+service SubscriberService {
+  // Subscribe to topics and receive real-time messages
+  rpc Subscribe(SubscribeRequest) returns (stream Message);
+  
+  // Subscribe to specific topics with filtering
+  rpc SubscribeWithFilter(SubscribeRequest) returns (stream Message);
+  
+  // Unsubscribe from topics
+  rpc Unsubscribe(UnsubscribeRequest) returns (UnsubscribeResponse);
+  
+  // Send heartbeat to maintain connection
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  
+  // Get historical messages for subscribed topics
+  rpc GetHistoricalMessages(HistoryRequest) returns (stream Message);
+}
+
+// Dashboard/Monitoring service - provides system status and metrics
+service DashboardService {
+  // Get broker status information
+  rpc GetBrokerStatus(google.protobuf.Empty) returns (BrokerStatus);
+  
+  // Get system statistics
+  rpc GetSystemStats(google.protobuf.Empty) returns (SystemStats);
+  
+  // Get recent messages with pagination
+  rpc GetRecentMessages(MessageQueryRequest) returns (MessageQueryResponse);
+  
+  // Get list of topics
+  rpc GetTopics(google.protobuf.Empty) returns (TopicsResponse);
+  
+  // Get list of active subscribers
+  rpc GetSubscribers(google.protobuf.Empty) returns (SubscribersResponse);
+  
+  // Stream real-time system events for monitoring
+  rpc StreamSystemEvents(google.protobuf.Empty) returns (stream SystemEvent);
+}
+
+// RAFT Consensus service - handles distributed consensus
+service RaftService {
+  // Request vote from other nodes during leader election
+  rpc RequestVote(VoteRequest) returns (VoteResponse);
+  
+  // Append log entries (including heartbeats)
+  rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesResponse);
+  
+  // Get current RAFT status
+  rpc GetRaftStatus(google.protobuf.Empty) returns (RaftStatus);
+  
+  // Install snapshot for catching up lagging nodes
+  rpc InstallSnapshot(InstallSnapshotRequest) returns (InstallSnapshotResponse);
+}
+
+// Publishing messages
+message PublishRequest {
+  string topic = 1;
+  string content = 2;
+  MessageFormat format = 3;
+  string event_name = 4;
+}
+
+message PublishResponse {
+  bool success = 1;
+  string message = 2;
+  bool forwarded = 3;
+  int32 subscriber_count = 4;
+}
+
+// Subscription management
+message SubscribeRequest {
+  repeated string topics = 1;
+  repeated MessageFormat formats = 2;
+  bool include_historical = 3;
+  string subscriber_id = 4;
+}
+
+message UnsubscribeRequest {
+  repeated string topics = 1;
+  string subscriber_id = 2;
+}
+
+message UnsubscribeResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// Heartbeat for connection management
+message HeartbeatRequest {
+  string subscriber_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+}
+
+message HeartbeatResponse {
+  bool acknowledged = 1;
+  google.protobuf.Timestamp server_timestamp = 2;
+}
+
+// Historical message queries
+message HistoryRequest {
+  repeated string topics = 1;
+  int32 limit = 2;
+  google.protobuf.Timestamp since = 3;
+}
+
+// Health and status responses
+message HealthResponse {
+  bool healthy = 1;
+  string status = 2;
+  google.protobuf.Timestamp timestamp = 3;
+}
+
+message BrokerStatus {
+  string status = 1;
+  int32 port = 2;
+  int32 subscribers = 3;
+  int32 current_connections = 4;
+  RaftStatus raft_status = 5;
+  google.protobuf.Timestamp uptime = 6;
+}
+
+message SystemStats {
+  int64 total_messages = 1;
+  int32 active_subscribers = 2;
+  int32 current_connections = 3;
+  int32 topics_count = 4;
+  double messages_per_minute = 5;
+  google.protobuf.Timestamp start_time = 6;
+}
+
+// Message queries for dashboard
+message MessageQueryRequest {
+  int32 limit = 1;
+  int32 offset = 2;
+  string topic_filter = 3;
+  MessageFormat format_filter = 4;
+}
+
+message MessageQueryResponse {
+  repeated Message messages = 1;
+  int32 total_count = 2;
+  bool has_more = 3;
+}
+
+message TopicsResponse {
+  repeated string topics = 1;
+}
+
+// Subscriber information
+message SubscriberInfo {
+  string id = 1;
+  repeated string topics = 2;
+  google.protobuf.Timestamp last_seen = 3;
+  string role = 4;
+  bool is_active = 5;
+}
+
+message SubscribersResponse {
+  repeated SubscriberInfo subscribers = 1;
+}
+
+// System events for real-time monitoring
+message SystemEvent {
+  enum EventType {
+    MESSAGE_PUBLISHED = 0;
+    SUBSCRIBER_CONNECTED = 1;
+    SUBSCRIBER_DISCONNECTED = 2;
+    LEADER_ELECTION = 3;
+    NODE_STATUS_CHANGE = 4;
+  }
+  
+  EventType type = 1;
+  string description = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  map<string, string> metadata = 4;
+}
+
+// RAFT Consensus Messages
+message VoteRequest {
+  int32 term = 1;
+  string candidate_id = 2;
+  int32 last_log_index = 3;
+  int32 last_log_term = 4;
+}
+
+message VoteResponse {
+  int32 term = 1;
+  bool vote_granted = 2;
+}
+
+message LogEntry {
+  int32 term = 1;
+  int32 index = 2;
+  string command_type = 3;
+  string command_data = 4;
+  google.protobuf.Timestamp timestamp = 5;
+}
+
+message AppendEntriesRequest {
+  int32 term = 1;
+  string leader_id = 2;
+  int32 prev_log_index = 3;
+  int32 prev_log_term = 4;
+  repeated LogEntry entries = 5;
+  int32 leader_commit = 6;
+}
+
+message AppendEntriesResponse {
+  int32 term = 1;
+  bool success = 2;
+  int32 conflict_index = 3;
+  int32 conflict_term = 4;
+}
+
+message RaftStatus {
+  NodeState state = 1;
+  int32 current_term = 2;
+  string voted_for = 3;
+  int32 commit_index = 4;
+  int32 last_applied = 5;
+  string leader_id = 6;
+  repeated string cluster_nodes = 7;
+  google.protobuf.Timestamp last_heartbeat = 8;
+}
+
+message InstallSnapshotRequest {
+  int32 term = 1;
+  string leader_id = 2;
+  int32 last_included_index = 3;
+  int32 last_included_term = 4;
+  int32 offset = 5;
+  bytes data = 6;
+  bool done = 7;
+}
+
+message InstallSnapshotResponse {
+  int32 term = 1;
+}

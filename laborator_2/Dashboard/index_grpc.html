@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>gRPC Message Broker Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Additional styles for gRPC dashboard */
+        .grpc-indicator {
+            display: inline-block;
+            padding: 4px 8px;
+            background: #007bff;
+            color: white;
+            border-radius: 4px;
+            font-size: 0.8em;
+            margin-left: 10px;
+        }
+        
+        .raft-status {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        
+        .format-raw { background: #6c757d; }
+        .format-json { background: #28a745; }
+        .format-xml { background: #ffc107; color: #000; }
+        
+        .message-format {
+            padding: 2px 6px;
+            border-radius: 3px;
+            color: white;
+            font-size: 0.75em;
+            font-weight: bold;
+        }
+        
+        .grpc-bridge-status {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            padding: 8px 12px;
+            background: #17a2b8;
+            color: white;
+            border-radius: 4px;
+            font-size: 0.85em;
+            z-index: 1000;
+        }
+        
+        .grpc-bridge-status.offline {
+            background: #dc3545;
+        }
+    </style>
+</head>
+<body>
+    <!-- gRPC Bridge Status Indicator -->
+    <div id="grpc-bridge-status" class="grpc-bridge-status">
+         gRPC Bridge: <span id="bridge-status-text">Connecting...</span>
+    </div>
+
+    <!-- Header -->
+    <header class="dashboard-header">
+        <h1> gRPC Message Broker Dashboard
+            <span class="grpc-indicator">gRPC Enabled</span>
+        </h1>
+        <div class="header-controls">
+            <button id="toggle-monitoring" class="btn btn-primary">Start Monitoring</button>
+            <button id="clear-messages" class="btn btn-secondary">Clear Messages</button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="dashboard-container">
+        <!-- System Status Section -->
+        <section class="status-section">
+            <h2> System Status</h2>
+            <div class="status-grid">
+                <div class="status-card">
+                    <h3>Broker Status</h3>
+                    <div id="system-status" class="status offline">
+                        <span id="status-indicator">INACTIVE</span>
+                        <span>gRPC Broker Offline</span>
+                    </div>
+                    <div class="status-detail">
+                        Last Updated: <span id="last-updated">Never</span>
+                    </div>
+                </div>
+                
+                <div class="status-card">
+                    <h3> Statistics</h3>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <span class="stat-label">Total Messages:</span>
+                            <span id="total-messages" class="stat-value">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Active Subscribers:</span>
+                            <span id="active-subscribers" class="stat-value">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Topics:</span>
+                            <span id="topics-count" class="stat-value">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Messages/Min:</span>
+                            <span id="messages-per-minute" class="stat-value">0.0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- RAFT Status -->
+            <div id="raft-status" class="raft-status">
+                <h4> RAFT Consensus</h4>
+                <div>Status: <span>Checking...</span></div>
+            </div>
+        </section>
+
+        <!-- Publishing Section -->
+        <section class="publish-section">
+            <h2>📤 Publish Message (gRPC)</h2>
+            <form id="publish-form" class="publish-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="topic">Topic:</label>
+                        <input type="text" id="topic" name="topic" placeholder="Enter topic (e.g., news, alerts)" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="format">Format:</label>
+                        <select id="format" name="format">
+                            <option value="RAW">RAW</option>
+                            <option value="JSON">JSON</option>
+                            <option value="XML">XML</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="content">Message Content:</label>
+                    <textarea id="content" name="content" rows="4" placeholder="Enter your message content..." required></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">📤 Publish via gRPC</button>
+            </form>
+        </section>
+
+        <!-- Messages Section -->
+        <section class="messages-section">
+            <h2> Recent Messages (<span id="message-count">0</span>)</h2>
+            
+            <!-- Filter Controls -->
+            <div class="filter-controls">
+                <input type="text" id="filter-topic" placeholder="Filter by topic..." class="filter-input">
+            </div>
+            
+            <!-- Messages List -->
+            <div id="messages-list" class="messages-list">
+                <div class="message-item">No messages available. Start monitoring to see real-time messages.</div>
+            </div>
+        </section>
+
+        <!-- Clients Section -->
+        <section class="clients-section">
+            <h2>👥 Active Subscribers</h2>
+            <div id="clients-list" class="clients-list">
+                <div class="client-item">No active subscribers</div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Footer -->
+    <footer class="dashboard-footer">
+        <p>&copy; 2024 gRPC Message Broker Dashboard | 
+           <a href="#" onclick="window.open('/grpc/status', '_blank')">gRPC Status</a> | 
+           <a href="#" onclick="window.open('/health', '_blank')">Bridge Health</a>
+        </p>
+    </footer>
+
+    <!-- Load gRPC-enabled JavaScript -->
+    <script src="script_grpc.js"></script>
+    
+    <script>
+        // Additional gRPC-specific initialization
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log(' gRPC Dashboard initialized');
+            
+            // Check bridge status
+            function checkBridgeStatus() {
+                fetch('/health')
+                    .then(response => response.json())
+                    .then(data => {
+                        const statusElement = document.getElementById('bridge-status-text');
+                        const containerElement = document.getElementById('grpc-bridge-status');
+                        
+                        if (data.status === 'healthy') {
+                            statusElement.textContent = 'Connected';
+                            containerElement.className = 'grpc-bridge-status';
+                        } else {
+                            statusElement.textContent = 'Error';
+                            containerElement.className = 'grpc-bridge-status offline';
+                        }
+                    })
+                    .catch(error => {
+                        const statusElement = document.getElementById('bridge-status-text');
+                        const containerElement = document.getElementById('grpc-bridge-status');
+                        statusElement.textContent = 'Offline';
+                        containerElement.className = 'grpc-bridge-status offline';
+                        console.error('Bridge status check failed:', error);
+                    });
+            }
+            
+            // Check bridge status immediately and every 10 seconds
+            checkBridgeStatus();
+            setInterval(checkBridgeStatus, 10000);
+            
+            // Add sample data button for testing
+            const publishSection = document.querySelector('.publish-section');
+            const testButton = document.createElement('button');
+            testButton.type = 'button';
+            testButton.className = 'btn btn-secondary';
+            testButton.textContent = '🧪 Test gRPC Publish';
+            testButton.style.marginLeft = '10px';
+            
+            testButton.addEventListener('click', function() {
+                document.getElementById('topic').value = 'test';
+                document.getElementById('content').value = JSON.stringify({
+                    "Id": Date.now(),
+                    "EventName": "TestEvent",
+                    "Value": "Test message from gRPC dashboard",
+                    "Topic": "test"
+                }, null, 2);
+                document.getElementById('format').value = 'JSON';
+            });
+            
+            publishSection.querySelector('button').parentNode.appendChild(testButton);
+        });
+    </script>
+</body>
+</html>
