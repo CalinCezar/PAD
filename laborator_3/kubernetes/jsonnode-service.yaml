@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: json-node
+  labels:
+    app: json-node
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5001
+    targetPort: 5001
+    protocol: TCP
+  selector:
+    app: json-node

@@ -1,0 +1,664 @@
+{
+	"info": {
+		"_postman_id": "emp-dw-2025-12-07",
+		"name": "Employee Data Warehouse",
+		"description": "Complete API testing collection for Employee Data Warehouse distributed system",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Health Checks",
+			"item": [
+				{
+					"name": "DW Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": ["{{base_url}}"],
+							"path": ["health"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "JSON Node Health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{json_node_url}}/health",
+							"host": ["{{json_node_url}}"],
+							"path": ["health"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "XML Node Health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{xml_node_url}}/health",
+							"host": ["{{xml_node_url}}"],
+							"path": ["health"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Get Employees",
+			"item": [
+				{
+					"name": "Get All Employees",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/employees",
+							"host": ["{{base_url}}"],
+							"path": ["employees"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Employees - Paginated (Limit 3)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/employees?offset=0&limit=3",
+							"host": ["{{base_url}}"],
+							"path": ["employees"],
+							"query": [
+								{
+									"key": "offset",
+									"value": "0"
+								},
+								{
+									"key": "limit",
+									"value": "3"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Employees - Paginated (Offset 3)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/employees?offset=3&limit=3",
+							"host": ["{{base_url}}"],
+							"path": ["employees"],
+							"query": [
+								{
+									"key": "offset",
+									"value": "3"
+								},
+								{
+									"key": "limit",
+									"value": "3"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Get Employee by ID",
+			"item": [
+				{
+					"name": "Get Employee by ID (1)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/employee?id=1",
+							"host": ["{{base_url}}"],
+							"path": ["employee"],
+							"query": [
+								{
+									"key": "id",
+									"value": "1"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Employee by ID (4)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/employee?id=4",
+							"host": ["{{base_url}}"],
+							"path": ["employee"],
+							"query": [
+								{
+									"key": "id",
+									"value": "4"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Employee by ID (Non-existent)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/employee?id=9999",
+							"host": ["{{base_url}}"],
+							"path": ["employee"],
+							"query": [
+								{
+									"key": "id",
+									"value": "9999"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Create Employee (PUT)",
+			"item": [
+				{
+					"name": "Create New Employee",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"100\",\n  \"name\": \"Alice Johnson\",\n  \"position\": \"Product Manager\",\n  \"department\": \"Product\",\n  \"salary\": 90000,\n  \"email\": \"alice.johnson@company.com\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/employee",
+							"host": ["{{base_url}}"],
+							"path": ["employee"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Employee - Missing ID",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Test Employee\",\n  \"position\": \"Developer\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/employee",
+							"host": ["{{base_url}}"],
+							"path": ["employee"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Update Employee (POST)",
+			"item": [
+				{
+					"name": "Update Employee Salary",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"1\",\n  \"salary\": 85000\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/employee",
+							"host": ["{{base_url}}"],
+							"path": ["employee"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Employee Position",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"2\",\n  \"position\": \"Senior Product Manager\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/employee",
+							"host": ["{{base_url}}"],
+							"path": ["employee"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Non-existent Employee",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"9999\",\n  \"salary\": 100000\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/employee",
+							"host": ["{{base_url}}"],
+							"path": ["employee"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Delete Employee",
+			"item": [
+				{
+					"name": "Delete Employee by ID",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/employee?id=100",
+							"host": ["{{base_url}}"],
+							"path": ["employee"],
+							"query": [
+								{
+									"key": "id",
+									"value": "100"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Non-existent Employee",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/employee?id=9999",
+							"host": ["{{base_url}}"],
+							"path": ["employee"],
+							"query": [
+								{
+									"key": "id",
+									"value": "9999"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Data Synchronization",
+			"item": [
+				{
+					"name": "Get Updates from Nodes",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/update/employees",
+							"host": ["{{base_url}}"],
+							"path": ["update", "employees"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Updates Since Timestamp",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/update/employees?since=2025-12-07T10:00:00",
+							"host": ["{{base_url}}"],
+							"path": ["update", "employees"],
+							"query": [
+								{
+									"key": "since",
+									"value": "2025-12-07T10:00:00"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Add Employee to JSON Node",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"200\",\n  \"name\": \"JSON Test Employee\",\n  \"position\": \"Test Developer\",\n  \"department\": \"Testing\",\n  \"salary\": 70000,\n  \"email\": \"json.test@company.com\"\n}"
+						},
+						"url": {
+							"raw": "{{json_node_url}}/employee",
+							"host": ["{{json_node_url}}"],
+							"path": ["employee"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Add Employee to XML Node",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"201\",\n  \"name\": \"XML Test Employee\",\n  \"position\": \"Test Engineer\",\n  \"department\": \"Testing\",\n  \"salary\": 72000,\n  \"email\": \"xml.test@company.com\"\n}"
+						},
+						"url": {
+							"raw": "{{xml_node_url}}/employee",
+							"host": ["{{xml_node_url}}"],
+							"path": ["employee"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Circuit Breaker",
+			"item": [
+				{
+					"name": "Get Circuit Breaker Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/circuit-breakers",
+							"host": ["{{base_url}}"],
+							"path": ["circuit-breakers"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Rate Limiting Test",
+			"item": [
+				{
+					"name": "Request 1",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": ["{{base_url}}"],
+							"path": ["health"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Request 2",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": ["{{base_url}}"],
+							"path": ["health"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Request 3",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": ["{{base_url}}"],
+							"path": ["health"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Request 4",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": ["{{base_url}}"],
+							"path": ["health"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Request 5",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": ["{{base_url}}"],
+							"path": ["health"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Request 6",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": ["{{base_url}}"],
+							"path": ["health"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Request 7",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": ["{{base_url}}"],
+							"path": ["health"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Request 8",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": ["{{base_url}}"],
+							"path": ["health"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Request 9",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": ["{{base_url}}"],
+							"path": ["health"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Request 10",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": ["{{base_url}}"],
+							"path": ["health"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Request 11 - Should Trigger Rate Limit",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": ["{{base_url}}"],
+							"path": ["health"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Node Operations",
+			"item": [
+				{
+					"name": "Get JSON Node Employees",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{json_node_url}}/employees",
+							"host": ["{{json_node_url}}"],
+							"path": ["employees"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get XML Node Employees",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{xml_node_url}}/employees",
+							"host": ["{{xml_node_url}}"],
+							"path": ["employees"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get JSON Node Updates",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{json_node_url}}/updates",
+							"host": ["{{json_node_url}}"],
+							"path": ["updates"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get XML Node Updates",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{xml_node_url}}/updates",
+							"host": ["{{xml_node_url}}"],
+							"path": ["updates"]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:5000",
+			"type": "string"
+		},
+		{
+			"key": "json_node_url",
+			"value": "http://localhost:5001",
+			"type": "string"
+		},
+		{
+			"key": "xml_node_url",
+			"value": "http://localhost:5002",
+			"type": "string"
+		}
+	]
+}

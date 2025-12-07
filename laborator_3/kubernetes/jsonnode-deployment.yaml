@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: json-node
+  labels:
+    app: json-node
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: json-node
+  template:
+    metadata:
+      labels:
+        app: json-node
+    spec:
+      containers:
+      - name: json-node
+        image: employee-json-node:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 5001
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5001
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5001
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 2

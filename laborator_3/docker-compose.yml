@@ -1,0 +1,85 @@
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: employee-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - employee-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  json-node:
+    build:
+      context: .
+      dockerfile: json_node/Dockerfile
+    container_name: employee-json-node
+    ports:
+      - "5001:5001"
+    networks:
+      - employee-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/health').read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  xml-node:
+    build:
+      context: .
+      dockerfile: xml_node/Dockerfile
+    container_name: employee-xml-node
+    ports:
+      - "5002:5002"
+    networks:
+      - employee-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5002/health').read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  data-warehouse:
+    build:
+      context: .
+      dockerfile: data_warehouse/Dockerfile
+    container_name: employee-data-warehouse
+    ports:
+      - "5000:5000"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      json-node:
+        condition: service_healthy
+      xml-node:
+        condition: service_healthy
+    networks:
+      - employee-network
+    environment:
+      - MONGO_URI=mongodb://mongodb:27017/
+      - JSON_NODE_URL=http://json-node:5001
+      - XML_NODE_URL=http://xml-node:5002
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health').read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  mongodb_data:
+    driver: local
+
+networks:
+  employee-network:
+    driver: bridge
