@@ -1,0 +1,48 @@
+# Manual Deployment Commands
+# Copy-paste these commands one by one in PowerShell
+
+# 1. Get Cosmos DB connection string
+az cosmosdb keys list --name employee-dw-cosmosdb --resource-group EmployeeDataWarehouse-RG --type connection-strings --query "connectionStrings[0].connectionString" -o tsv
+
+# Save the output from above command, you'll need it later!
+
+# 2. Login to ACR
+az acr login --name employeedwregistry
+
+# 3. Build and push Docker images
+docker build -f data_warehouse/Dockerfile -t employeedwregistry.azurecr.io/data-warehouse:latest .
+docker push employeedwregistry.azurecr.io/data-warehouse:latest
+
+docker build -f json_node/Dockerfile -t employeedwregistry.azurecr.io/json-node:latest .
+docker push employeedwregistry.azurecr.io/json-node:latest
+
+docker build -f xml_node/Dockerfile -t employeedwregistry.azurecr.io/xml-node:latest .
+docker push employeedwregistry.azurecr.io/xml-node:latest
+
+# 4. Create AKS cluster (this takes 10-15 minutes!)
+az aks create --resource-group EmployeeDataWarehouse-RG --name employee-dw-aks --location spaincentral --node-count 2 --node-vm-size Standard_B2s --enable-cluster-autoscaler --min-count 1 --max-count 3 --generate-ssh-keys --attach-acr employeedwregistry
+
+# 5. Get AKS credentials
+az aks get-credentials --resource-group EmployeeDataWarehouse-RG --name employee-dw-aks --overwrite-existing
+
+# 6. Verify connection
+kubectl get nodes
+
+# 7. Create namespace
+kubectl create namespace employee-dw
+
+# 8. Create secret (REPLACE <CONNECTION_STRING> with the string from step 1!)
+kubectl create secret generic cosmosdb-connection --from-literal=connection-string="<CONNECTION_STRING>" -n employee-dw
+
+# 9. Deploy application
+kubectl apply -f kubernetes/deploy-all-azure.yaml
+
+# 10. Wait for pods (run multiple times until all are Running)
+kubectl get pods -n employee-dw
+
+# 11. Get External IP (run multiple times until IP appears)
+kubectl get service data-warehouse -n employee-dw
+
+# When you see the EXTERNAL-IP, open in browser:
+# http://<EXTERNAL-IP>:5000/health
+# http://<EXTERNAL-IP>:5000/employees

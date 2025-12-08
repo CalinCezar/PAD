@@ -7,13 +7,14 @@ import requests
 from functools import wraps
 from collections import defaultdict
 import logging
+import os
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # MongoDB Configuration
-MONGO_URI = "mongodb://mongodb:27017/"
+MONGO_URI = os.environ.get('MONGO_URI', 'mongodb://mongodb:27017/')
 client = MongoClient(MONGO_URI)
 db = client.employee_warehouse
 employees_collection = db.employees

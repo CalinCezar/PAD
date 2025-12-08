@@ -1,0 +1,14 @@
+# Example Terraform variables file
+# Copy this file to terraform.tfvars and fill in your values
+
+subscription_id = "your-azure-subscription-id"
+tenant_id       = "your-azure-tenant-id"
+
+# Optional overrides
+# resource_group_name    = "EmployeeDataWarehouse-RG"
+# location               = "eastus"
+# acr_name              = "employeedwregistry"
+# aks_cluster_name      = "employee-dw-aks"
+# cosmosdb_account_name = "employee-dw-cosmosdb"
+# environment           = "prod"
+# node_count            = 2

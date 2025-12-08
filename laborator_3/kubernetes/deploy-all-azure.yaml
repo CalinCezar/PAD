@@ -1,0 +1,126 @@
+# Complete deployment for Azure
+# JSON Node Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: json-node
+  namespace: employee-dw
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: json-node
+  template:
+    metadata:
+      labels:
+        app: json-node
+    spec:
+      containers:
+      - name: json-node
+        image: employeedwregistry.azurecr.io/json-node:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5001
+---
+# JSON Node Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: json-node
+  namespace: employee-dw
+spec:
+  selector:
+    app: json-node
+  ports:
+  - port: 5001
+    targetPort: 5001
+---
+# XML Node Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: xml-node
+  namespace: employee-dw
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: xml-node
+  template:
+    metadata:
+      labels:
+        app: xml-node
+    spec:
+      containers:
+      - name: xml-node
+        image: employeedwregistry.azurecr.io/xml-node:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5002
+---
+# XML Node Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: xml-node
+  namespace: employee-dw
+spec:
+  selector:
+    app: xml-node
+  ports:
+  - port: 5002
+    targetPort: 5002
+---
+# Data Warehouse Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-warehouse
+  namespace: employee-dw
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: data-warehouse
+  template:
+    metadata:
+      labels:
+        app: data-warehouse
+    spec:
+      containers:
+      - name: data-warehouse
+        image: employeedwregistry.azurecr.io/data-warehouse:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5000
+        env:
+        - name: MONGO_URI
+          valueFrom:
+            secretKeyRef:
+              name: cosmosdb-connection
+              key: connection-string
+        - name: JSON_NODE_URL
+          value: "http://json-node:5001"
+        - name: XML_NODE_URL
+          value: "http://xml-node:5002"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+---
+# Data Warehouse Service (LoadBalancer for external access)
+apiVersion: v1
+kind: Service
+metadata:
+  name: data-warehouse
+  namespace: employee-dw
+spec:
+  type: LoadBalancer
+  selector:
+    app: data-warehouse
+  ports:
+  - port: 5000
+    targetPort: 5000
