@@ -293,7 +293,7 @@ def push_to_source_nodes(emp_id, data):
 @app.route('/hello', methods=['GET'])
 def hello():
     return jsonify({
-        'message': 'Hello from JSON Node!'
+        'message': 'Hello PAD!'
     }), 200
 
 # Health check endpoint
