@@ -289,6 +289,13 @@ def push_to_source_nodes(emp_id, data):
     Thread(target=push_to_node, args=('http://json-node:5001/employee', data)).start()
     Thread(target=push_to_node, args=('http://xml-node:5002/employee', data)).start()
 
+# Hello endpoint
+@app.route('/hello', methods=['GET'])
+def hello():
+    return jsonify({
+        'message': 'Hello from JSON Node!'
+    }), 200
+
 # Health check endpoint
 @app.route('/health', methods=['GET'])
 def health():

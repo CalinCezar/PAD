@@ -173,14 +173,6 @@ def health():
         'timestamp': datetime.now().isoformat()
     }), 200
 
-# Hello endpoint
-@app.route('/hello', methods=['GET'])
-def health():
-    with data_lock:
-        employee_count = len(employees)
-
-    return jsonify({'message': 'Hello from JSON Node!'}), 200
-
 # Initialize with some sample data
 def init_sample_data():
     sample_employees = [
